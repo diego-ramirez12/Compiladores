@@ -5,10 +5,11 @@
 
 
 /*
- * Determina si un caracter corresponde a un token simple
- * de un solo caracter.
+ * Determina si un carácter corresponde a un token simple de un solo
+ * carácter.
  *
- * Esta funcion ahora es privada del lexer, por eso es static.
+ * Si existe una correspondencia, almacena el tipo de token en *type y
+ * devuelve 1. En caso contrario, devuelve 0.
  */
 static int simple_token_type(int c, TokenType *type)
 {
@@ -71,7 +72,10 @@ static int simple_token_type(int c, TokenType *type)
 }
 
 
-/* Espacios que el lexer debe ignorar. */
+/*
+ * Indica si el carácter recibido corresponde a un espacio o salto de línea
+ * que debe ser ignorado por el lexer.
+ */
 static int is_ignored_space(int c)
 {
     return c == ' ' ||
@@ -81,14 +85,19 @@ static int is_ignored_space(int c)
 }
 
 
-/* Devuelve 1 si c esta entre 0 y 9. */
+/*
+ * Devuelve 1 si el carácter recibido corresponde a un dígito decimal.
+ */
 static int is_digit(int c)
 {
     return c >= '0' && c <= '9';
 }
 
 
-/* Devuelve 1 si c puede iniciar un identificador. */
+/*
+ * Devuelve 1 si el carácter puede aparecer como primer carácter de un
+ * identificador.
+ */
 static int is_identifier_start(int c)
 {
     return (c >= 'a' && c <= 'z') ||
@@ -97,7 +106,10 @@ static int is_identifier_start(int c)
 }
 
 
-/* Devuelve 1 si c puede formar parte de un identificador. */
+/*
+ * Devuelve 1 si el carácter puede formar parte de un identificador después
+ * de su primer carácter.
+ */
 static int is_identifier_part(int c)
 {
     return is_identifier_start(c) || is_digit(c);
@@ -105,8 +117,10 @@ static int is_identifier_part(int c)
 
 
 /*
- * Determina si un identificador corresponde realmente
- * a una palabra reservada.
+ * Determina el tipo de token asociado a un lexema que inicialmente fue
+ * reconocido como identificador.
+ * Si el lexema coincide con una palabra reservada o un literal booleano,
+ * devuelve su tipo específico; en cualquier otro caso devuelve IDENTIFIER.
  */
 static TokenType identifier_type(const char *lexeme)
 {
@@ -139,7 +153,9 @@ static TokenType identifier_type(const char *lexeme)
 
 
 /*
- * Reconoce operadores formados por dos caracteres.
+ * Determina si dos caracteres consecutivos forman un operador compuesto.
+ * Si existe una coincidencia, almacena el tipo correspondiente en *type y
+ * devuelve 1. En caso contrario, devuelve 0.
  */
 static int compound_token_type(int first, int second, TokenType *type)
 {
@@ -187,11 +203,12 @@ static int compound_token_type(int first, int second, TokenType *type)
 
 
 /*
- * Actualiza la linea y columna del lexer.
- *
- * La diferencia con P02 es que line, column y previous_was_cr
- * ahora viven dentro de Lexer, porque deben conservarse entre
- * llamadas a lexer_next_token().
+ * Actualiza la línea y columna actuales del lexer después de consumir un
+ * carácter.
+ * También controla secuencias CRLF para evitar contar '
+' y '
+' como dos
+ * saltos de línea independientes.
  */
 static void advance_position(Lexer *lexer, int c)
 {
@@ -220,9 +237,8 @@ static void advance_position(Lexer *lexer, int c)
 
 
 /*
- * Crea el token que sera entregado al parser.
- *
- * Ya no se imprime ni se destruye aqui.
+ * Inicializa un token con la información recibida y traduce un fallo de
+ * memoria al estado correspondiente del lexer.
  */
 static LexerStatus make_token(
     Token *out,
@@ -239,7 +255,8 @@ static LexerStatus make_token(
 
 
 /*
- * Ignora el resto de un comentario //.
+ * Consume los caracteres restantes de un comentario de línea iniciado por
+ * '//', hasta encontrar un salto de línea o el final del archivo.
  */
 static LexerStatus skip_line_comment(Lexer *lexer)
 {
@@ -261,9 +278,11 @@ static LexerStatus skip_line_comment(Lexer *lexer)
 
 
 /*
- * Lee un identificador completo.
- *
- * El primer caracter ya fue consumido antes de entrar.
+ * Lee un identificador completo a partir de un primer carácter que ya fue
+ * consumido.
+ * El búfer del lexema crece dinámicamente cuando es necesario. El primer
+ * carácter que no pertenece al identificador se devuelve al flujo para que
+ * sea procesado por la siguiente llamada al lexer.
  */
 static LexerStatus read_identifier(
     Lexer *lexer,
@@ -306,8 +325,8 @@ static LexerStatus read_identifier(
     }
 
     /*
-     * Si el caracter que detuvo al identificador no es EOF,
-     * lo regresamos para que sea procesado en la siguiente llamada.
+     * El carácter que detuvo la lectura no pertenece al identificador.
+     * Si no es EOF, se devuelve al flujo para procesarlo posteriormente.
      */
     if (next != EOF)
     {
@@ -340,7 +359,9 @@ static LexerStatus read_identifier(
 
 
 /*
- * Lee un literal entero completo.
+ * Lee un literal entero completo a partir de un primer dígito ya consumido.
+ * El búfer del lexema crece dinámicamente mientras se leen más dígitos.
+ * El primer carácter que no pertenece al entero se devuelve al flujo.
  */
 static LexerStatus read_integer(
     Lexer *lexer,
@@ -413,10 +434,9 @@ static LexerStatus read_integer(
 
 
 /*
- * Inicializa el estado del lexer.
- *
- * El FILE * no pertenece al lexer.
- * main sera responsable de cerrarlo.
+ * Inicializa el estado del lexer sobre el flujo de entrada recibido.
+ * El lexer conserva una referencia al FILE, pero no adquiere su propiedad;
+ * el código que abrió el archivo sigue siendo responsable de cerrarlo.
  */
 int lexer_init(Lexer *lexer, FILE *source)
 {
@@ -433,11 +453,11 @@ int lexer_init(Lexer *lexer, FILE *source)
 
 
 /*
- * Produce exactamente el siguiente token disponible.
- *
- * No imprime el token.
- * No lo destruye.
- * El receptor adquiere la propiedad del Token entregado.
+ * Obtiene el siguiente token disponible desde el flujo de entrada.
+ * La función ignora espacios y comentarios de línea, reconoce identificadores,
+ * palabras reservadas, literales enteros, operadores y símbolos simples.
+ * El Token resultante se entrega mediante out y pasa a ser responsabilidad
+ * del código receptor.
  */
 LexerStatus lexer_next_token(Lexer *lexer, Token *out)
 {
@@ -459,7 +479,8 @@ LexerStatus lexer_next_token(Lexer *lexer, Token *out)
         c = fgetc(lexer->source);
 
         /*
-         * EOF real: entregamos TOKEN_EOF.
+         * Si se alcanza el final real del archivo, se produce TOKEN_EOF.
+         * Un error del flujo se reporta como LEXER_STATUS_IO_ERROR.
          */
         if (c == EOF)
         {
@@ -476,7 +497,8 @@ LexerStatus lexer_next_token(Lexer *lexer, Token *out)
         }
 
         /*
-         * Guardamos la posicion inicial antes de avanzar.
+         * Se conserva la posición inicial del token antes de actualizar
+         * la posición global con el carácter recién consumido.
          */
         token_line = lexer->line;
         token_column = lexer->column;
@@ -484,13 +506,14 @@ LexerStatus lexer_next_token(Lexer *lexer, Token *out)
         advance_position(lexer, c);
 
         /*
-         * Ignoramos espacios y saltos de linea.
+         * Los espacios, tabuladores y saltos de línea no generan tokens.
          */
         if (is_ignored_space(c))
             continue;
 
         /*
-         * Identificadores y palabras reservadas.
+         * Si el carácter puede iniciar un identificador, se delega la lectura
+         * del lexema completo a read_identifier.
          */
         if (is_identifier_start(c))
         {
@@ -504,8 +527,8 @@ LexerStatus lexer_next_token(Lexer *lexer, Token *out)
         }
 
         /*
-         * Operadores que pueden estar formados por
-         * uno o dos caracteres.
+         * Estos caracteres pueden iniciar operadores de uno o dos caracteres.
+         * Primero se intenta reconocer la versión compuesta.
          */
         if (c == '=' ||
             c == '!' ||
@@ -538,8 +561,8 @@ LexerStatus lexer_next_token(Lexer *lexer, Token *out)
                 }
 
                 /*
-                 * No formaba operador compuesto.
-                 * Regresamos el segundo caracter.
+                 * Si el segundo carácter no completa un operador compuesto,
+                 * se devuelve al flujo para que pueda procesarse después.
                  */
                 if (ungetc(next, lexer->source) == EOF)
                     return LEXER_STATUS_IO_ERROR;
@@ -551,7 +574,8 @@ LexerStatus lexer_next_token(Lexer *lexer, Token *out)
         }
 
         /*
-         * Comentarios de linea //.
+         * Un '/' puede iniciar un comentario de línea. Si no aparece un
+         * segundo '/', continuará procesándose posteriormente como token SLASH.
          */
         if (c == '/')
         {
@@ -569,8 +593,8 @@ LexerStatus lexer_next_token(Lexer *lexer, Token *out)
                     return status;
 
                 /*
-                 * El comentario no produce token.
-                 * Continuamos buscando el siguiente.
+                 * Los comentarios no producen tokens, por lo que se continúa
+                 * buscando el siguiente elemento léxico de la entrada.
                  */
                 continue;
             }
@@ -587,7 +611,8 @@ LexerStatus lexer_next_token(Lexer *lexer, Token *out)
         }
 
         /*
-         * Tokens simples: + - * / = < > ( ) { } ;
+         * Se reconocen los símbolos de un solo carácter definidos por
+         * simple_token_type.
          */
         if (simple_token_type(c, &type))
         {
@@ -606,7 +631,8 @@ LexerStatus lexer_next_token(Lexer *lexer, Token *out)
         }
 
         /*
-         * Literales enteros.
+         * Si el carácter actual es un dígito, se lee el literal entero
+         * completo.
          */
         if (is_digit(c))
         {
@@ -620,12 +646,10 @@ LexerStatus lexer_next_token(Lexer *lexer, Token *out)
         }
 
         /*
-         * Cualquier otro caracter se convierte en ERROR.
-         *
-         * IMPORTANTE:
-         * Esto sigue siendo LEXER_STATUS_OK.
-         * El lexer funciono correctamente; el problema esta
-         * en el programa fuente.
+         * Cualquier carácter que no pertenezca a una categoría válida se
+         * convierte en un token ERROR.
+         * Esto no representa un fallo interno del lexer: el análisis léxico
+         * terminó correctamente y el error pertenece al programa fuente.
          */
         {
             char lexeme[2] = {
@@ -646,8 +670,8 @@ LexerStatus lexer_next_token(Lexer *lexer, Token *out)
 
 
 /*
- * El lexer no cierra el archivo porque no es su propietario.
- * Solo deja su estado en una condicion segura.
+ * Restablece el estado interno del lexer.
+ * El archivo asociado no se cierra porque el lexer no es su propietario.
  */
 void lexer_destroy(Lexer *lexer)
 {

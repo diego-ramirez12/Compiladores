@@ -48,9 +48,9 @@ static int parse_unary_expression(Parser *parser);
 
 static int parse_primary(Parser *parser);
 /*
- * Reporta un token ERROR recibido del lexer.
- *
- * Este diagnóstico es léxico, no sintáctico.
+ * Reporta en stderr un token ERROR producido por el lexer.
+ * El token ya fue reconocido correctamente por el lexer como un error
+ * léxico; esta función únicamente muestra su ubicación y lexema.
  */
 static void report_lexical_error(const Token *token)
 {
@@ -67,10 +67,10 @@ static void report_lexical_error(const Token *token)
 }
 
 /*
- * Reporta un error sintactico.
- *
- * panic_mode evita reportar repetidamente el mismo
- * problema antes de que el parser se sincronice.
+ * Registra y reporta un error sintáctico asociado al token actual.
+ * Activa had_error para indicar que el programa no es sintácticamente
+ * válido y panic_mode para evitar diagnósticos repetidos mientras el
+ * parser intenta encontrar un punto seguro de recuperación.
  */
 static void syntax_error(
     Parser *parser,
@@ -112,8 +112,10 @@ static void syntax_error(
 }
 
 /*
- * Busca un punto seguro donde reanudar el analisis
- * despues de un error sintactico.
+ * Recupera el análisis después de un error sintáctico.
+ * Descarta tokens hasta encontrar un punto desde el cual sea razonable
+ * continuar: el final de una sentencia, el inicio de una nueva sentencia
+ * o un token que deba ser manejado por una estructura exterior.
  */
 static void synchronize(Parser *parser)
 {
@@ -124,8 +126,8 @@ static void synchronize(Parser *parser)
            !parser_check(parser, TOKEN_EOF))
     {
         /*
-         * Si encontramos ';', lo consumimos y dejamos
-         * el parser listo para la siguiente sentencia.
+         * Un ';' marca el final de una sentencia. Se consume para
+         * reanudar el análisis desde el token siguiente.
          */
         if (parser_check(parser, SEMICOLON))
         {
@@ -137,8 +139,8 @@ static void synchronize(Parser *parser)
         }
 
         /*
-         * Estos tokens pueden comenzar una nueva sentencia.
-         * NO deben consumirse.
+         * Estos tokens pueden iniciar una nueva sentencia. Se conservan
+         * como lookahead para que parse_statement pueda procesarlos.
          */
         if (parser_check(parser, INT) ||
             parser_check(parser, BOOL) ||
@@ -153,8 +155,9 @@ static void synchronize(Parser *parser)
         }
 
         /*
-         * Estos tokens pertenecen posiblemente a una
-         * estructura exterior. Tampoco deben consumirse.
+         * RBRACE y ELSE pueden cerrar o continuar una estructura exterior.
+         * Se conservan para que la función que contiene el contexto actual
+         * pueda procesarlos.
          */
         if (parser_check(parser, RBRACE) ||
             parser_check(parser, ELSE))
@@ -164,8 +167,8 @@ static void synchronize(Parser *parser)
         }
 
         /*
-         * No encontramos nada útil todavía:
-         * descartamos el token y seguimos buscando.
+         * Si el token actual no es un punto de sincronización, se descarta
+         * y se continúa buscando un lugar seguro para reanudar el análisis.
          */
         if (!parser_advance(parser))
             return;
@@ -175,10 +178,9 @@ static void synchronize(Parser *parser)
 }
 
 /*
- * Exige que el token actual tenga el tipo expected.
- *
- * Si coincide, lo consume.
- * Si no coincide, reporta el error y trata de recuperarse.
+ * Verifica que el lookahead tenga el tipo esperado.
+ * Si coincide, consume el token y devuelve 1. Si no coincide, reporta
+ * el error sintáctico, ejecuta la recuperación y devuelve 0.
  */
 static int parser_consume(
     Parser *parser,
@@ -208,7 +210,9 @@ static int parser_consume(
 }
 
 /*
+ * Analiza una expresión completa.
  * expression ::= or_expression
+ * Devuelve 1 si la expresión es válida y 0 si se detecta un error.
  */
 static int parse_expression(Parser *parser)
 {
@@ -216,6 +220,7 @@ static int parse_expression(Parser *parser)
 }
 
 /*
+ * Analiza operadores OR respetando la precedencia de las expresiones AND.
  * or_expression ::= and_expression
  *                   ( OR and_expression )*
  */
@@ -234,6 +239,8 @@ static int parse_or_expression(Parser *parser)
 }
 
 /*
+ * Analiza operadores AND respetando la precedencia de las expresiones
+ * de igualdad.
  * and_expression ::= equality_expression
  *                    ( AND equality_expression )*
  */
@@ -252,6 +259,7 @@ static int parse_and_expression(Parser *parser)
 }
 
 /*
+ * Analiza comparaciones de igualdad y desigualdad.
  * equality_expression ::= comparison_expression
  *                         ( (EQUAL | NOT_EQUAL)
  *                           comparison_expression )*
@@ -275,6 +283,7 @@ static int parse_equality_expression(Parser *parser)
 }
 
 /*
+ * Analiza operadores relacionales sobre expresiones aditivas.
  * comparison_expression ::= additive_expression
  *                           ( (LESS
  *                            | LESS_EQUAL
@@ -303,6 +312,7 @@ static int parse_comparison_expression(Parser *parser)
 }
 
 /*
+ * Analiza sumas y restas sobre expresiones multiplicativas.
  * additive_expression ::= multiplicative_expression
  *                         ( (PLUS | MINUS)
  *                           multiplicative_expression )*
@@ -326,6 +336,7 @@ static int parse_additive_expression(Parser *parser)
 }
 
 /*
+ * Analiza multiplicaciones y divisiones sobre expresiones unarias.
  * multiplicative_expression ::= unary_expression
  *                               ( (STAR | SLASH)
  *                                 unary_expression )*
@@ -349,6 +360,8 @@ static int parse_multiplicative_expression(Parser *parser)
 }
 
 /*
+ * Analiza el operador unario '-' o delega el análisis a una expresión
+ * primaria.
  * unary_expression ::= MINUS unary_expression
  *                    | primary
  */
@@ -361,11 +374,14 @@ static int parse_unary_expression(Parser *parser)
 }
 
 /*
+ * Analiza los elementos básicos que pueden formar una expresión.
  * primary ::= INTEGER
  *           | TRUE
  *           | FALSE
  *           | IDENTIFIER
  *           | LPAREN expression RPAREN
+ * Los paréntesis permiten agrupar una expresión completa y requieren
+ * obligatoriamente su RPAREN de cierre.
  */
 static int parse_primary(Parser *parser)
 {
@@ -409,21 +425,24 @@ static int parse_primary(Parser *parser)
 }
 
 /*
+ * Analiza una declaración de variable.
  * declaration ::= type IDENTIFIER
  *                 ( ASSIGN expression )?
  *                 SEMICOLON
+ * El tipo ya fue identificado por parse_statement. La declaración puede
+ * incluir una inicialización y siempre debe terminar con ';'.
  */
 static void parse_declaration(Parser *parser)
 {
     /*
-     * parse_statement ya comprobo que estamos
-     * sobre INT o BOOL.
+     * El lookahead es INT o BOOL. Se consume el tipo para continuar con
+     * el identificador declarado.
      */
     if (!parser_advance(parser))
         return;
 
     /*
-     * IDENTIFIER obligatorio.
+     * Después del tipo se requiere obligatoriamente un identificador.
      */
     if (!parser_consume(
             parser,
@@ -434,9 +453,8 @@ static void parse_declaration(Parser *parser)
     }
 
     /*
-     * Inicializacion opcional:
-     *
-     * ( ASSIGN expression )?
+     * Si aparece ASSIGN, se analiza la expresión utilizada para
+     * inicializar la variable.
      */
     if (parser_match(parser, ASSIGN))
     {
@@ -445,7 +463,7 @@ static void parse_declaration(Parser *parser)
     }
 
     /*
-     * Toda declaracion termina obligatoriamente en ';'.
+     * Toda declaración debe finalizar con un punto y coma.
      */
     parser_consume(
         parser,
@@ -455,19 +473,20 @@ static void parse_declaration(Parser *parser)
 }
 
 /*
+ * Analiza una asignación.
  * assignment ::= IDENTIFIER ASSIGN expression SEMICOLON
+ * El identificador inicial ya fue reconocido por parse_statement.
  */
 static void parse_assignment(Parser *parser)
 {
     /*
-     * parse_statement ya comprobo que el token actual
-     * es IDENTIFIER.
+     * Se consume el identificador que aparece al inicio de la asignación.
      */
     if (!parser_advance(parser))
         return;
 
     /*
-     * ASSIGN obligatorio.
+     * Después del identificador se requiere el operador de asignación '='.
      */
     if (!parser_consume(
             parser,
@@ -478,13 +497,13 @@ static void parse_assignment(Parser *parser)
     }
 
     /*
-     * expression obligatoria.
+     * Se analiza la expresión que proporciona el valor asignado.
      */
     if (!parse_expression(parser))
         return;
 
     /*
-     * SEMICOLON obligatorio.
+     * La asignación debe terminar con un punto y coma.
      */
     parser_consume(
         parser,
@@ -494,24 +513,22 @@ static void parse_assignment(Parser *parser)
 }
 
 /*
+ * Analiza un bloque de sentencias delimitado por llaves.
  * block ::= LBRACE statement* RBRACE
  */
 static void parse_block(Parser *parser)
 {
     /*
-     * parse_statement ya comprobo LBRACE.
+     * El lookahead es LBRACE; se consume la llave de apertura del bloque.
      */
     if (!parser_advance(parser))
         return;
 
     /*
-     * statement*
-     *
-     * Seguimos hasta cerrar el bloque.
-     *
-     * También nos detenemos ante ELSE para que,
-     * si falta una llave de cierre, el ELSE quede
-     * disponible para la estructura exterior.
+     * Se procesan sentencias hasta encontrar la llave de cierre.
+     * También se detiene el recorrido ante ELSE para conservarlo como
+     * parte de una estructura if exterior cuando falta una llave de cierre.
+     * TOKEN_EOF evita continuar más allá del final de la entrada.
      */
     while (!parser_check(parser, RBRACE) &&
            !parser_check(parser, ELSE) &&
@@ -524,7 +541,7 @@ static void parse_block(Parser *parser)
     }
 
     /*
-     * '}' obligatorio.
+     * El bloque debe finalizar con una llave de cierre '}'.
      */
     parser_consume(
         parser,
@@ -534,18 +551,21 @@ static void parse_block(Parser *parser)
 }
 
 /*
+ * Analiza una sentencia while.
  * while_statement ::= WHILE LPAREN expression RPAREN statement
+ * El cuerpo corresponde a una sola sentencia, que también puede ser
+ * un bloque.
  */
 static void parse_while_statement(Parser *parser)
 {
     /*
-     * Consumimos WHILE.
+     * Se consume el token WHILE que inicia la sentencia.
      */
     if (!parser_advance(parser))
         return;
 
     /*
-     * '(' obligatorio.
+     * La condición debe comenzar con un paréntesis de apertura.
      */
     if (!parser_consume(
             parser,
@@ -556,13 +576,13 @@ static void parse_while_statement(Parser *parser)
     }
 
     /*
-     * Condicion obligatoria.
+     * Se analiza la expresión utilizada como condición del while.
      */
     if (!parse_expression(parser))
         return;
 
     /*
-     * ')' obligatorio.
+     * La condición debe finalizar con un paréntesis de cierre.
      */
     if (!parser_consume(
             parser,
@@ -573,27 +593,27 @@ static void parse_while_statement(Parser *parser)
     }
 
     /*
-     * El cuerpo es UNA sentencia.
-     *
-     * Esa sentencia puede ser un bloque.
+     * Se analiza la sentencia que constituye el cuerpo del while.
+     * Un bloque cuenta como una sola sentencia.
      */
     parse_statement(parser);
 }
 
 /*
+ * Analiza una sentencia if con una rama else opcional.
  * if_statement ::= IF LPAREN expression RPAREN statement
  *                  ( ELSE statement )?
  */
 static void parse_if_statement(Parser *parser)
 {
     /*
-     * Consumimos IF.
+     * Se consume el token IF que inicia la sentencia.
      */
     if (!parser_advance(parser))
         return;
 
     /*
-     * '(' obligatorio.
+     * La condición debe comenzar con un paréntesis de apertura.
      */
     if (!parser_consume(
             parser,
@@ -604,13 +624,13 @@ static void parse_if_statement(Parser *parser)
     }
 
     /*
-     * Condicion obligatoria.
+     * Se analiza la expresión utilizada como condición del if.
      */
     if (!parse_expression(parser))
         return;
 
     /*
-     * ')' obligatorio.
+     * La condición debe finalizar con un paréntesis de cierre.
      */
     if (!parser_consume(
             parser,
@@ -621,7 +641,7 @@ static void parse_if_statement(Parser *parser)
     }
 
     /*
-     * Cuerpo del IF.
+     * Se analiza la sentencia asociada a la rama principal del if.
      */
     parse_statement(parser);
 
@@ -629,7 +649,8 @@ static void parse_if_statement(Parser *parser)
         return;
 
     /*
-     * ELSE opcional.
+     * Si el siguiente token es ELSE, se consume y se analiza la sentencia
+     * correspondiente a la rama alternativa.
      */
     if (parser_match(parser, ELSE))
     {
@@ -638,18 +659,21 @@ static void parse_if_statement(Parser *parser)
 }
 
 /*
+ * Analiza una sentencia print.
  * print_statement ::= PRINT LPAREN expression RPAREN SEMICOLON
+ * La expresión es obligatoria, por lo que una llamada print() vacía
+ * produce un error sintáctico.
  */
 static void parse_print_statement(Parser *parser)
 {
     /*
-     * parse_statement ya comprobo PRINT.
+     * Se consume el token PRINT que inicia la sentencia.
      */
     if (!parser_advance(parser))
         return;
 
     /*
-     * '(' obligatorio.
+     * Después de PRINT se requiere un paréntesis de apertura.
      */
     if (!parser_consume(
             parser,
@@ -660,15 +684,14 @@ static void parse_print_statement(Parser *parser)
     }
 
     /*
-     * expression obligatoria.
-     *
-     * Por eso print(); es invalido.
+     * Se analiza la expresión que será impresa. No se permite una
+     * expresión vacía.
      */
     if (!parse_expression(parser))
         return;
 
     /*
-     * ')' obligatorio.
+     * La expresión de PRINT debe cerrarse con ')'.
      */
     if (!parser_consume(
             parser,
@@ -679,7 +702,7 @@ static void parse_print_statement(Parser *parser)
     }
 
     /*
-     * ';' obligatorio.
+     * La sentencia PRINT debe finalizar con un punto y coma.
      */
     parser_consume(
         parser,
@@ -689,17 +712,21 @@ static void parse_print_statement(Parser *parser)
 }
 
 /*
+ * Determina y analiza la sentencia indicada por el lookahead actual.
  * statement ::= declaration
  *             | assignment
  *             | print_statement
  *             | if_statement
  *             | while_statement
  *             | block
+ *
+ * Si el token no puede iniciar ninguna sentencia válida, reporta el error
+ * y utiliza la estrategia de sincronización para continuar el análisis.
  */
 static void parse_statement(Parser *parser)
 {
     /*
-     * declaration
+     * INT y BOOL identifican el inicio de una declaración.
      */
     if (parser_check(parser, INT) ||
         parser_check(parser, BOOL))
@@ -709,7 +736,8 @@ static void parse_statement(Parser *parser)
     }
 
     /*
-     * assignment
+     * Un IDENTIFIER al inicio de una sentencia se interpreta como
+     * una asignación.
      */
     if (parser_check(parser, IDENTIFIER))
     {
@@ -718,7 +746,7 @@ static void parse_statement(Parser *parser)
     }
 
     /*
-     * print_statement
+     * PRINT identifica el inicio de una sentencia de impresión.
      */
     if (parser_check(parser, PRINT))
     {
@@ -727,7 +755,7 @@ static void parse_statement(Parser *parser)
     }
 
     /*
-     * if_statement
+     * IF identifica el inicio de una sentencia condicional.
      */
     if (parser_check(parser, IF))
     {
@@ -736,7 +764,7 @@ static void parse_statement(Parser *parser)
     }
 
     /*
-     * while_statement
+     * WHILE identifica el inicio de una sentencia iterativa.
      */
     if (parser_check(parser, WHILE))
     {
@@ -745,7 +773,7 @@ static void parse_statement(Parser *parser)
     }
 
     /*
-     * block
+     * LBRACE identifica el inicio de un bloque.
      */
     if (parser_check(parser, LBRACE))
     {
@@ -754,7 +782,7 @@ static void parse_statement(Parser *parser)
     }
 
     /*
-     * Token inesperado.
+     * Cualquier otro token en esta posición no puede iniciar una sentencia.
      */
     syntax_error(
         parser,
@@ -763,10 +791,9 @@ static void parse_statement(Parser *parser)
     );
 
     /*
-     * Garantizamos progreso.
-     *
-     * Esto es especialmente importante para un ELSE
-     * sin IF o una llave inesperada a nivel superior.
+     * Se consume al menos un token antes de sincronizar para garantizar
+     * progreso y evitar que tokens inesperados, como un ELSE aislado o una
+     * llave fuera de contexto, provoquen un ciclo sin avance.
      */
     if (!parser_advance(parser))
         return;
@@ -775,8 +802,9 @@ static void parse_statement(Parser *parser)
 }
 
 /*
- * Inicializa el parser y solicita inmediatamente
- * el primer token de anticipación.
+ * Inicializa el estado del parser y obtiene el primer token de lookahead.
+ * Devuelve 1 cuando la inicialización y el primer avance son correctos;
+ * devuelve 0 si los argumentos son inválidos o no puede obtenerse el token.
  */
 int parser_init(Parser *parser, Lexer *lexer)
 {
@@ -791,7 +819,8 @@ int parser_init(Parser *parser, Lexer *lexer)
     parser->internal_failure = 0;
 
     /*
-     * El parser comienza con un lookahead disponible.
+     * El parser mantiene siempre un token de anticipación disponible
+     * mientras no ocurra un fallo interno.
      */
     if (!parser_advance(parser))
         return 0;
@@ -801,11 +830,13 @@ int parser_init(Parser *parser, Lexer *lexer)
 
 
 /*
- * Descarta el token actual y obtiene el siguiente.
- *
- * Los Token ERROR se reportan aquí y se consumen,
- * para impedir que posteriormente produzcan además
- * un error sintáctico.
+ * Libera el lookahead actual, solicita el siguiente token al lexer y lo
+ * deja disponible para el parser.
+ * Los tokens ERROR representan errores léxicos de la entrada. Se reportan
+ * y descartan aquí para impedir que también generen un diagnóstico
+ * sintáctico sobre el mismo carácter.
+ * Devuelve 1 cuando se obtiene un token utilizable y 0 ante un fallo
+ * interno del lexer o argumentos inválidos.
  */
 int parser_advance(Parser *parser)
 {
@@ -815,8 +846,8 @@ int parser_advance(Parser *parser)
         return 0;
 
     /*
-     * Si ya poseíamos un token, primero liberamos
-     * su lexema.
+     * Antes de obtener un nuevo lookahead se libera el lexema del token
+     * actual, ya que su almacenamiento pertenece al parser.
      */
     if (parser->has_current)
     {
@@ -832,7 +863,8 @@ int parser_advance(Parser *parser)
         );
 
         /*
-         * Fallo interno del lexer.
+         * Un estado distinto de LEXER_STATUS_OK indica un fallo interno
+         * al solicitar el siguiente token.
          */
         if (status != LEXER_STATUS_OK)
         {
@@ -843,8 +875,8 @@ int parser_advance(Parser *parser)
         parser->has_current = 1;
 
         /*
-         * ERROR es un token válido producido correctamente
-         * por el lexer, pero representa un error del programa.
+         * ERROR es un token producido válidamente por el lexer, pero
+         * representa un carácter o secuencia inválida en el programa fuente.
          */
         if (parser->current.type == ERROR)
         {
@@ -856,8 +888,9 @@ int parser_advance(Parser *parser)
             parser->has_current = 0;
 
             /*
-             * Seguimos solicitando tokens hasta encontrar
-             * uno que el parser sintáctico pueda analizar.
+             * El token léxico erróneo ya fue reportado y liberado. Se solicita
+             * el siguiente token hasta obtener uno apto para el análisis
+             * sintáctico.
              */
             continue;
         }
@@ -868,9 +901,9 @@ int parser_advance(Parser *parser)
 
 
 /*
- * Consulta si el lookahead es del tipo indicado.
- *
- * No consume ningún token.
+ * Comprueba si el lookahead actual tiene el tipo indicado sin consumirlo.
+ * Devuelve 1 si existe un token actual del tipo solicitado y 0 en caso
+ * contrario.
  */
 int parser_check(const Parser *parser, TokenType type)
 {
@@ -882,8 +915,10 @@ int parser_check(const Parser *parser, TokenType type)
 
 
 /*
- * Si el token actual coincide con type, lo consume
- * y avanza al siguiente.
+ * Comprueba si el lookahead coincide con el tipo indicado y, si coincide,
+ * lo consume mediante parser_advance.
+ * Devuelve 1 cuando hubo coincidencia y avance; en cualquier otro caso
+ * devuelve 0.
  */
 int parser_match(Parser *parser, TokenType type)
 {
@@ -898,7 +933,9 @@ int parser_match(Parser *parser, TokenType type)
 
 
 /*
- * Permite consultar el token actual sin consumirlo.
+ * Devuelve una referencia de solo lectura al lookahead actual.
+ * No consume el token. Devuelve NULL si el parser es inválido o no posee
+ * un token actual.
  */
 const Token *parser_current(const Parser *parser)
 {
@@ -908,7 +945,11 @@ const Token *parser_current(const Parser *parser)
     return &parser->current;
 }
 /*
+ * Analiza un programa completo.
  * program ::= statement* TOKEN_EOF
+ * Procesa sentencias hasta alcanzar el final de la entrada. Devuelve 1
+ * únicamente si se llega a TOKEN_EOF sin errores léxicos, sintácticos ni
+ * fallos internos.
  */
 int parser_parse(Parser *parser)
 {
@@ -920,10 +961,8 @@ int parser_parse(Parser *parser)
     }
 
     /*
-     * statement*
-     *
-     * Seguimos hasta encontrar el final real
-     * del archivo.
+     * Mientras no se alcance TOKEN_EOF, cada iteración analiza una
+     * sentencia completa a partir del lookahead actual.
      */
     while (!parser_check(parser, TOKEN_EOF))
     {
@@ -933,28 +972,26 @@ int parser_parse(Parser *parser)
             return 0;
 
         /*
-         * Defensa adicional:
-         * parse_statement debe siempre avanzar o
-         * dejar un token que pueda ser procesado.
+         * Como verificación defensiva, el parser debe conservar un lookahead
+         * válido después de procesar cada sentencia.
          */
         if (!parser->has_current)
             return 0;
     }
 
     /*
-     * Llegar aqui significa que verificamos TOKEN_EOF.
-     *
-     * El programa solamente es valido si durante
-     * todo el recorrido no hubo errores.
+     * Al alcanzar TOKEN_EOF, el resultado final depende de que no se haya
+     * registrado ningún error durante todo el recorrido.
      */
     return !parser->had_error &&
            !parser->internal_failure;
 }
 
 /*
- * Libera el último token propiedad del parser.
- *
- * El parser NO destruye el lexer.
+ * Libera los recursos que todavía pertenecen al parser y restablece su
+ * estado interno.
+ * Si existe un lookahead, destruye su lexema. El Lexer asociado no se
+ * destruye porque su ciclo de vida es responsabilidad del código llamador.
  */
 void parser_destroy(Parser *parser)
 {
