@@ -1,22 +1,30 @@
-# Pruebas públicas — Prácticas 1 y 2
+# Pruebas públicas — Regresión del lexer de las Prácticas 1 y 2
 
 ## Uso
 
-Cada archivo de `inputs/` debe ejecutarse con el programa `minic`. La salida estándar debe coincidir exactamente con el archivo del mismo nombre ubicado en `expected/`, cambiando la extensión `.mc` por `.out`.
+Estas pruebas permiten verificar que la adaptación del lexer a una interfaz incremental en la Práctica 3 conserve el comportamiento implementado durante las Prácticas 1 y 2.
 
-Desde la raíz del proyecto, todas las pruebas públicas y propias pueden ejecutarse mediante:
+El ejecutable normal `minic` ya no imprime la secuencia de tokens, debido a que en la Práctica 3 éstos son consumidos internamente por el parser. Por esta razón, las pruebas de regresión utilizan `tests/lexer_driver.c`, que solicita los tokens mediante `lexer_next_token()` y los imprime con el formato empleado en las prácticas anteriores.
 
-```text
-make test
-```
-
-El material de la Práctica 2 también incluye el script:
+Desde la raíz del proyecto, las pruebas públicas del lexer pueden ejecutarse mediante:
 
 ```text
-sh tests/public/run_public_tests.sh
+make test-lexer
 ```
 
-Los diagnósticos operativos no deben mezclarse con la secuencia de tokens en `stdout`.
+Esta regla compila temporalmente el ejecutable:
+
+```text
+lexer_test
+```
+
+y posteriormente ejecuta:
+
+```text
+bash tests/lexer_public/run_public_tests.sh ./lexer_test
+```
+
+El script compara la salida producida para cada archivo de `inputs/` con el archivo correspondiente dentro de `expected/`.
 
 ## Pruebas heredadas de la Práctica 1
 
@@ -24,7 +32,7 @@ Los diagnósticos operativos no deben mezclarse con la secuencia de tokens en `s
 |---|---|
 | `p1_empty.mc` | Archivo vacío y posición inicial de `TOKEN_EOF`. |
 | `p2_whitespace.mc` | Espacios, tabuladores y saltos de línea. |
-| `p3_single_symbols.mc` | Todos los símbolos simples requeridos en P1. |
+| `p3_single_symbols.mc` | Todos los símbolos simples requeridos en la Práctica 1. |
 | `p4_integer.mc` | Entero de varios dígitos. |
 | `p5_integer_expression.mc` | Enteros y símbolos en una línea. |
 | `p6_multiple_lines.mc` | Seguimiento de línea y columna en varias líneas. |
@@ -49,10 +57,18 @@ Los diagnósticos operativos no deben mezclarse con la secuencia de tokens en `s
 | `p10_longest_match.mc` | Reconocimiento del lexema válido de mayor longitud. |
 | `p11_error_recovery.mc` | Continuación del análisis después de errores léxicos. |
 | `p12_complete_lexer.mc` | Integración de las principales funcionalidades del lexer completo. |
-| `p13_crlf.mc` | Seguimiento correcto de posición con CRLF. |
+| `p13_crlf.mc` | Seguimiento correcto de posición con secuencias CRLF. |
 
 ## Alcance
 
-En este proyecto se conservan las diez pruebas públicas de la Práctica 1 y se añaden las trece pruebas públicas de la Práctica 2, para un total de 23 casos públicos.
+En este proyecto se conservan las diez pruebas públicas de la Práctica 1 y las trece pruebas públicas incorporadas en la Práctica 2, para un total de 23 casos de regresión del lexer.
 
-Estas pruebas representan el comportamiento mínimo esperado. El proyecto también incluye pruebas propias en `tests/custom/`, ya que durante la evaluación pueden utilizarse casos adicionales que respeten la especificación de MiniC.
+Estas pruebas permiten comprobar que la nueva interfaz incremental utilizada en la Práctica 3 no altere el reconocimiento de tokens, lexemas ni posiciones desarrollado anteriormente.
+
+Las pruebas propias del lexer se conservan por separado en:
+
+```text
+tests/lexer_custom/
+```
+
+Las pruebas públicas y propias del lexer forman parte de la validación de regresión del proyecto y no sustituyen las pruebas correspondientes al parser de la Práctica 3.

@@ -1,14 +1,13 @@
-# Práctica 2 — Analizador léxico completo de MiniC
+# Práctica 3 — Analizador sintáctico descendente recursivo de MiniC
 
 ## Información general
 
 | Campo | Información |
 |---|---|
 | Asignatura | Compiladores |
-| Número de práctica | 2 |
+| Número de práctica | 3 |
 | Semestre | 2027-1 |
-| Equipo | 6 |
-
+| Equipo | 06 |
 
 ## Integrantes
 
@@ -17,32 +16,44 @@
 | Guzman Ramirez Diego Arturo | 321182324 | diego_aa@ciencias.unam.mx |
 | Marcial Ahedo Andrick Iorel | 321304074 | marcialandrick@ciencias.unam.mx |
 
-
 ## Estructura del proyecto
 
 ```text
-Practica02_EquipoGuzmanDMarcialA/
+Practica03_Equipo06/
 ├── README.md
 ├── CHANGELOG.md
 ├── reporte.pdf
 ├── Makefile
+├── include/
+│   ├── lexer/
+│   │   ├── lexer.h
+│   │   └── token.h
+│   └── parser/
+│       └── parser.h
 ├── src/
 │   ├── main.c
-│   └── lexer/
-│       ├── lexer.c
-│       └── token.c
-├── include/
-│   └── lexer/
-│       ├── lexer.h
-│       └── token.h
+│   ├── lexer/
+│   │   ├── lexer.c
+│   │   └── token.c
+│   └── parser/
+│       └── parser.c
 └── tests/
     ├── README.md
+    ├── lexer_driver.c
     ├── public/
     │   ├── README.md
     │   ├── inputs/
     │   ├── expected/
     │   └── run_public_tests.sh
-    └── custom/
+    ├── parser_custom/
+    │   ├── inputs/
+    │   └── run_custom_tests.sh
+    ├── lexer_public/
+    │   ├── README.md
+    │   ├── inputs/
+    │   ├── expected/
+    │   └── run_public_tests.sh
+    └── lexer_custom/
         ├── inputs/
         └── expected/
 ```
@@ -51,19 +62,22 @@ Practica02_EquipoGuzmanDMarcialA/
 
 | Archivo o módulo | Responsabilidad |
 |---|---|
-| `src/main.c` | Punto de entrada del programa. Valida los argumentos, abre el archivo fuente, ejecuta el analizador léxico y cierra el archivo. |
-| `src/lexer/lexer.c` | Contiene la lógica principal del analizador léxico. Reconoce números enteros, símbolos simples, identificadores, palabras reservadas, literales booleanos, operadores compuestos y comentarios de una sola línea. También realiza el seguimiento de línea y columna, genera tokens `ERROR`, permite la recuperación ante errores y produce `TOKEN_EOF`. |
-| `src/lexer/token.c` | Implementa la creación, impresión y liberación de los tokens. Conserva el tipo, lexema, línea y columna inicial de cada token. |
-| `include/lexer/lexer.h` | Declara las funciones utilizadas por el analizador léxico. |
-| `include/lexer/token.h` | Define las categorías léxicas mediante `TokenType`, la estructura `Token` y las operaciones asociadas a los tokens. |
-| `tests/` | Contiene las pruebas públicas proporcionadas para la práctica y las pruebas adicionales desarrolladas por el equipo. |
+| `src/main.c` | Punto de entrada e integración. Valida los argumentos, abre el archivo fuente, inicializa el lexer y el parser, inicia el análisis, muestra el resultado general y libera los recursos utilizados. |
+| `src/lexer/lexer.c` | Implementa el analizador léxico incremental heredado de la Práctica 2. Reconoce los tokens de MiniC y entrega un token por llamada al parser. |
+| `src/lexer/token.c` | Implementa la creación, impresión y liberación de tokens y sus lexemas. |
+| `include/lexer/lexer.h` | Define la estructura `Lexer`, los estados del analizador léxico y su interfaz incremental. |
+| `include/lexer/token.h` | Define los tipos de token, la estructura `Token` y las operaciones asociadas. |
+| `src/parser/parser.c` | Implementa el parser descendente recursivo, el reconocimiento de sentencias y expresiones, el manejo del lookahead, los diagnósticos y la recuperación ante errores. |
+| `include/parser/parser.h` | Define la estructura `Parser` y la interfaz pública del analizador sintáctico. |
+| `tests/` | Contiene las pruebas de la Práctica 3 y las pruebas de regresión del lexer desarrollado en las prácticas anteriores. |
 
 ## Requisitos
 
 - GCC con soporte para C11.
 - GNU Make.
 - Dependencias adicionales: ninguna.
-- La compilación utiliza como mínimo las opciones `-std=c11 -Wall -Wextra -Wpedantic`.
+- Bash para ejecutar los scripts de pruebas.
+- La compilación utiliza las opciones `-std=c11 -Wall -Wextra -Wpedantic`.
 
 ## Compilación
 
@@ -87,129 +101,137 @@ make clean
 
 ## Ejecución
 
-El programa recibe como argumento la ruta de un archivo fuente:
+El programa recibe como argumento la ruta de un archivo fuente MiniC:
 
 ```text
 ./minic programa.mc
 ```
 
-Por ejemplo, para una entrada con el contenido:
+Si el programa no contiene errores léxicos ni sintácticos, la salida en `stdout` es:
 
 ```text
-int contador = 10;
+Programa sintacticamente correcto.
 ```
 
-la salida es:
+Los diagnósticos léxicos y sintácticos se envían a `stderr`.
 
-```text
-1:0 INT int
-1:4 IDENTIFIER contador
-1:13 ASSIGN =
-1:15 INTEGER 10
-1:17 SEMICOLON ;
-1:18 TOKEN_EOF
-```
+Durante la ejecución normal no se imprime la secuencia de tokens.
 
-La salida se imprime en la salida estándar utilizando el formato establecido para los tokens:
+Los códigos de salida utilizados son:
 
-```text
-línea:columna TIPO_TOKEN lexema
-```
-
-Para `TOKEN_EOF` no se imprime lexema:
-
-```text
-línea:columna TOKEN_EOF
-```
+- `0`: programa sintácticamente correcto.
+- `1`: programa con errores léxicos o sintácticos.
+- `2`: error de uso, apertura del archivo o fallo interno.
 
 ## Funcionalidades implementadas
 
-- [x] Lectura del archivo fuente.
-- [x] Sistema de tokens.
+- [x] Reutilización del lexer desarrollado en la Práctica 2.
+- [x] Interfaz incremental del lexer mediante `lexer_next_token`.
 - [x] Seguimiento de línea y columna.
-- [x] Manejo de espacios en blanco.
-- [x] Manejo de `\n`, `\r` y `\r\n`.
-- [x] Símbolos simples.
-- [x] Números enteros.
-- [x] Identificadores.
-- [x] Palabras reservadas.
-- [x] Literales booleanos.
-- [x] Operadores compuestos.
-- [x] Comentarios de una sola línea.
-- [x] Caracteres no reconocidos mediante `ERROR`.
-- [x] Recuperación después de errores léxicos.
-- [x] Final del archivo mediante `TOKEN_EOF`.
-- [x] Administración dinámica de lexemas.
+- [x] Manejo dinámico de tokens y lexemas.
+- [x] Token de anticipación o lookahead.
+- [x] Parser descendente recursivo.
+- [x] Reconocimiento de declaraciones.
+- [x] Reconocimiento de asignaciones.
+- [x] Reconocimiento de sentencias `print`.
+- [x] Reconocimiento de condicionales `if` y `else`.
+- [x] Asociación del `else` con el `if` más cercano.
+- [x] Reconocimiento de ciclos `while`.
+- [x] Reconocimiento de bloques.
+- [x] Expresiones con precedencia y asociatividad.
+- [x] Operador negativo unario.
+- [x] Expresiones agrupadas mediante paréntesis.
+- [x] Detección de errores sintácticos.
+- [x] Manejo de tokens `ERROR` provenientes del lexer.
+- [x] Diagnósticos con línea y columna.
+- [x] Recuperación ante errores mediante sincronización.
+- [x] Continuación del análisis después de errores locales.
+- [x] Verificación del archivo completo hasta `TOKEN_EOF`.
+- [x] Liberación de los tokens utilizados por el parser.
 
-Los identificadores se reconocen mediante el patrón:
-
-```text
-[a-zA-Z_][a-zA-Z0-9_]*
-```
-
-Las palabras reservadas y literales booleanos reconocidos son:
-
-| Lexema | Token |
-|---|---|
-| `int` | `INT` |
-| `bool` | `BOOL` |
-| `if` | `IF` |
-| `else` | `ELSE` |
-| `while` | `WHILE` |
-| `print` | `PRINT` |
-| `true` | `TRUE` |
-| `false` | `FALSE` |
-
-El reconocimiento distingue entre mayúsculas y minúsculas.
-
-Los operadores compuestos reconocidos son:
-
-| Lexema | Token |
-|---|---|
-| `==` | `EQUAL` |
-| `!=` | `NOT_EQUAL` |
-| `<=` | `LESS_EQUAL` |
-| `>=` | `GREATER_EQUAL` |
-| `&&` | `AND` |
-| `||` | `OR` |
-
-Los caracteres `!`, `&` y `|` aislados producen un token `ERROR`.
-
-Los comentarios comienzan con `//` y terminan al encontrar `\n`, `\r`, `\r\n` o el final del archivo. No generan tokens, pero actualizan correctamente la línea y la columna.
-
-El carácter `/` continúa produciendo `SLASH` cuando no está seguido por otro `/`.
+En esta práctica el parser únicamente valida la sintaxis. No se construye un Árbol de Sintaxis Abstracta ni se realizan comprobaciones semánticas o de tipos.
 
 ## Pruebas
 
-Las pruebas se encuentran dentro del directorio `tests/` y se dividen en dos conjuntos:
+Las pruebas se encuentran dentro del directorio `tests/`.
 
-- `tests/public/`: pruebas públicas proporcionadas con el material de la práctica.
-- `tests/custom/`: pruebas adicionales desarrolladas por el equipo.
+### Pruebas públicas del parser
 
-Para compilar el proyecto y ejecutar todas las pruebas:
+Para ejecutar las pruebas públicas correspondientes a la Práctica 3:
 
 ```text
 make test
 ```
 
-Actualmente se incluyen 23 pruebas públicas y 10 pruebas propias, para un total de 33 casos. Durante el desarrollo, todas finalizaron correctamente.
+Estas pruebas verifican programas válidos e inválidos, declaraciones, asignaciones, sentencias `print`, precedencia de expresiones, condicionales, ciclos, bloques, recuperación ante errores, errores léxicos y consumo completo de la entrada.
 
-Para una descripción detallada de los casos de prueba consulte `tests/README.md` y `tests/public/README.md`.
+### Pruebas propias del parser
+
+Para ejecutar las pruebas adicionales desarrolladas por el equipo:
+
+```text
+make test-custom
+```
+
+Se incluyen 12 casos propios que comprueban, entre otros:
+
+- bloques vacíos;
+- estructuras de control anidadas;
+- `if` y `while` sin bloques;
+- ausencia de comprobaciones semánticas;
+- recuperación ante múltiples errores;
+- `else` aislado;
+- ausencia de una llave antes de `else`;
+- cadenas de operadores unarios;
+- combinación completa de niveles de precedencia;
+- expresiones incompletas al llegar a `TOKEN_EOF`;
+- combinación de errores léxicos y sintácticos.
+
+### Pruebas de regresión del lexer
+
+Para ejecutar las pruebas públicas del lexer heredadas de las Prácticas 1 y 2:
+
+```text
+make test-lexer
+```
+
+Estas pruebas utilizan `tests/lexer_driver.c` para consumir la nueva interfaz incremental del lexer y comprobar que el comportamiento léxico anterior se conserve.
+
+También se mantienen en `tests/lexer_custom/` las diez pruebas propias creadas durante las Prácticas 1 y 2.
+
+### Ejecución conjunta
+
+Para ejecutar las pruebas públicas del parser, las pruebas propias del parser y las pruebas públicas de regresión del lexer:
+
+```text
+make test-all
+```
 
 ## Problemas conocidos
 
-> No se conocen problemas adicionales a las limitaciones propias del alcance de la Práctica 2.
+> No se conocen problemas adicionales a las limitaciones propias del alcance de la Práctica 3.
 
-La implementación corresponde al analizador léxico completo definido para MiniC y servirá como entrada para las etapas posteriores del compilador.
+La implementación realiza únicamente validación sintáctica. La construcción del Árbol de Sintaxis Abstracta y las comprobaciones semánticas corresponden a prácticas posteriores.
 
 ## Notas de ejecución
 
-Los comandos `make`, `make clean` y `make test` deben ejecutarse desde la raíz del proyecto, donde se encuentra el archivo `Makefile`.
+Los comandos de compilación y prueba deben ejecutarse desde la raíz del proyecto, donde se encuentra el archivo `Makefile`.
 
-Antes de generar el ZIP de entrega debe ejecutarse:
+Los comandos disponibles son:
+
+```text
+make
+make clean
+make test
+make test-custom
+make test-lexer
+make test-all
+```
+
+Antes de generar el archivo ZIP de entrega se recomienda ejecutar:
 
 ```text
 make clean
 ```
 
-Esto evita incluir el ejecutable `minic` o archivos temporales en la entrega.
+Esto elimina el ejecutable `minic`, `lexer_test` y otros archivos generados durante la compilación y las pruebas.
