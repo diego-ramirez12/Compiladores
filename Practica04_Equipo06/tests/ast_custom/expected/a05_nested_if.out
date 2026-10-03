@@ -1,0 +1,19 @@
+AST:
+Program
+  If
+    Condition
+      Boolean(true)
+    Then
+      Block
+        If
+          Condition
+            Boolean(false)
+          Then
+            Block
+              Print
+                Integer(1)
+          Else
+            Block
+              Print
+                Integer(2)
+Programa sintacticamente correcto.

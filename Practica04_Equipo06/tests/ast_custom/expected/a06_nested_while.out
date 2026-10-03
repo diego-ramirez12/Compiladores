@@ -1,0 +1,25 @@
+AST:
+Program
+  While
+    Condition
+      Greater
+        Identifier(x)
+        Integer(0)
+    Body
+      Block
+        While
+          Condition
+            Greater
+              Identifier(y)
+              Integer(0)
+          Body
+            Block
+              Assignment(y)
+                Subtract
+                  Identifier(y)
+                  Integer(1)
+        Assignment(x)
+          Subtract
+            Identifier(x)
+            Integer(1)
+Programa sintacticamente correcto.
