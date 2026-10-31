@@ -1,0 +1,17 @@
+AST:
+Program
+  Assignment(x)
+    Or
+      And
+        Equal
+          Less
+            Add
+              Integer(1)
+              Multiply
+                Integer(2)
+                Integer(3)
+            Integer(10)
+          Boolean(true)
+        Boolean(false)
+      Boolean(true)
+Programa sintacticamente correcto.

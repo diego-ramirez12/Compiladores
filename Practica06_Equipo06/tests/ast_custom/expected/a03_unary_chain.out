@@ -1,0 +1,7 @@
+AST:
+Program
+  Print
+    Negate
+      Negate
+        Identifier(x)
+Programa sintacticamente correcto.
